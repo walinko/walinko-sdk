@@ -1,0 +1,47 @@
+name: Release
+
+# Tag conventions:
+#   ruby-vX.Y.Z  → publishes the gem from sdks/ruby
+#   php-vX.Y.Z   → tags the split mirror so Packagist publishes
+#                  (see php-split.yml)
+
+on:
+  push:
+    tags:
+      - 'ruby-v*'
+      - 'php-v*'
+
+jobs:
+  ruby:
+    name: Publish Ruby gem
+    if: startsWith(github.ref, 'refs/tags/ruby-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          working-directory: sdks/ruby
+          bundler-cache: true
+      - name: Build
+        working-directory: sdks/ruby
+        run: gem build walinko.gemspec
+      - name: Publish to RubyGems
+        working-directory: sdks/ruby
+        env:
+          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+        run: |
+          mkdir -p ~/.gem
+          printf -- "---\n:rubygems_api_key: %s\n" "$RUBYGEMS_API_KEY" > ~/.gem/credentials
+          chmod 0600 ~/.gem/credentials
+          gem push *.gem
+
+  php:
+    name: Tag PHP mirror
+    if: startsWith(github.ref, 'refs/tags/php-v')
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "PHP releases propagate via .github/workflows/php-split.yml"
+          echo "(this job is a no-op placeholder; the actual tag push happens"
+          echo " in the split workflow when the tag matches refs/tags/php-v*)."

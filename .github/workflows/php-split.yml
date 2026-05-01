@@ -1,0 +1,52 @@
+name: PHP subtree split (Packagist mirror)
+
+# Public Packagist requires composer.json at the repo root, but our composer
+# package lives at sdks/php/. Each push to main mirrors that subdirectory
+# into a thin read-only repo (walinko/walinko-php) that Packagist watches.
+# This is the same pattern Symfony, Laravel, and Doctrine use.
+#
+# Required org-level secrets:
+#   - WALINKO_PHP_MIRROR_REPO   = walinko/walinko-php
+#   - WALINKO_PHP_MIRROR_TOKEN  = PAT with `contents: write` on the mirror repo
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
+      - 'sdks/php/**'
+      - '.github/workflows/php-split.yml'
+
+jobs:
+  split:
+    name: Split sdks/php → walinko-php
+    runs-on: ubuntu-latest
+    if: ${{ vars.WALINKO_PHP_MIRROR_REPO != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install splitsh-lite
+        run: |
+          curl -fsSL -o /tmp/splitsh.tgz \
+            https://github.com/splitsh/lite/releases/download/v2.0.0/lite_linux_amd64.tar.gz
+          tar -xzf /tmp/splitsh.tgz -C /tmp
+          sudo mv /tmp/splitsh-lite /usr/local/bin/
+      - name: Compute split SHA
+        id: split
+        run: |
+          SHA=$(splitsh-lite --prefix=sdks/php)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Push to mirror
+        env:
+          MIRROR: ${{ vars.WALINKO_PHP_MIRROR_REPO }}
+          TOKEN:  ${{ secrets.WALINKO_PHP_MIRROR_TOKEN }}
+          SHA:    ${{ steps.split.outputs.sha }}
+        run: |
+          git remote add mirror "https://x-access-token:${TOKEN}@github.com/${MIRROR}.git"
+          # main branch
+          git push mirror "${SHA}:refs/heads/main" --force
+          # if this run was triggered by a tag, propagate the tag too
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            git push mirror "${SHA}:${GITHUB_REF}"
+          fi

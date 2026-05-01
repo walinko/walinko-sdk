@@ -1,0 +1,38 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Env
+.env
+.env.local
+
+# Ruby
+sdks/ruby/Gemfile.lock
+sdks/ruby/.bundle/
+sdks/ruby/vendor/bundle/
+sdks/ruby/pkg/
+sdks/ruby/coverage/
+sdks/ruby/tmp/
+sdks/ruby/*.gem
+sdks/ruby/.rspec_status
+
+# PHP
+sdks/php/vendor/
+sdks/php/composer.lock
+sdks/php/.phpunit.cache/
+sdks/php/.phpunit.result.cache
+sdks/php/coverage/
+sdks/php/.php-cs-fixer.cache
+
+# Node (in case examples or tooling pull anything in)
+node_modules/
+
+# Build output
+dist/
+build/

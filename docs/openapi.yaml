@@ -1,0 +1,397 @@
+openapi: 3.1.0
+info:
+  title: Walinko Public API
+  version: 1.0.0
+  description: |
+    Server-to-server REST API for sending transactional WhatsApp messages
+    through devices that the calling tenant owns.
+
+    All requests are authenticated with an API key issued from the Walinko
+    dashboard. Keys are scoped to a single tenant; the tenant is resolved
+    from the key, so no extra header is required.
+
+    Every successful response is wrapped in a `{ success, message, data }`
+    envelope. Error responses use the same envelope shape with
+    `{ success: false, message, error_code, details }`.
+  contact:
+    name: Walinko Support
+    url: https://walinko.com/support
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: https://api.walinko.com
+    description: Production
+  - url: https://api-stage.walinko.com
+    description: Staging
+
+security:
+  - apiKey: []
+
+tags:
+  - name: Messages
+    description: Send WhatsApp messages and look up delivery status.
+
+paths:
+  /api/v1/public/messages:
+    post:
+      tags: [Messages]
+      summary: Send a transactional WhatsApp message
+      description: |
+        Sends a WhatsApp message via one of the tenant's connected devices,
+        rendering a template with the provided variables. Operates in two
+        modes:
+
+        - **Sync (default, `async: false`)** — blocks up to 15s while the
+          underlying WhatsApp send completes, then returns `200` with the
+          delivery's `tracking_id` and `wa_message_id`.
+        - **Async (`async: true`)** — enqueues the send and returns `202`
+          immediately with a `tracking_id` and `status_url`. Poll
+          `GET /api/v1/public/messages/{tracking_id}` for the final state.
+
+        ### Idempotency
+
+        Provide a unique `Idempotency-Key` header (any string up to 200
+        chars) to make retries safe. The first response is cached for 24
+        hours; replays return the original response with header
+        `Idempotent-Replayed: true`. Replaying with a different payload
+        returns `409 idempotency_conflict`.
+
+        ### Rate limiting
+
+        30 requests per minute per API key (sliding window). When exceeded,
+        responds `429` with a `Retry-After` header. Every response carries
+        `X-RateLimit-Limit` and `X-RateLimit-Remaining`.
+      operationId: sendMessage
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendMessageRequest' }
+            examples:
+              minimal:
+                summary: Sync send with the primary variant
+                value:
+                  device_id: 1
+                  template_id: 12
+                  phone: '+8801617738431'
+                  variables: { name: Kazi, dist: Dhaka }
+              variant:
+                summary: Sync send selecting a specific variant
+                value:
+                  device_id: 1
+                  template_id: 12
+                  variant_index: 1
+                  phone: '+8801747705862'
+                  variables: { name: Siam, dist: Chittagong }
+              async:
+                summary: Async enqueue
+                value:
+                  device_id: 1
+                  template_id: 12
+                  phone: '+8801617738431'
+                  variables: { name: Kazi, dist: Dhaka }
+                  async: true
+      responses:
+        '200':
+          description: Message sent (sync mode).
+          headers:
+            X-RateLimit-Limit: { $ref: '#/components/headers/X-RateLimit-Limit' }
+            X-RateLimit-Remaining: { $ref: '#/components/headers/X-RateLimit-Remaining' }
+            Idempotent-Replayed: { $ref: '#/components/headers/Idempotent-Replayed' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendMessageSyncResponse' }
+        '202':
+          description: Message queued (async mode).
+          headers:
+            X-RateLimit-Limit: { $ref: '#/components/headers/X-RateLimit-Limit' }
+            X-RateLimit-Remaining: { $ref: '#/components/headers/X-RateLimit-Remaining' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SendMessageAsyncResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '504': { $ref: '#/components/responses/GatewayTimeout' }
+
+  /api/v1/public/messages/{trackingId}:
+    get:
+      tags: [Messages]
+      summary: Get delivery status for a message
+      description: |
+        Returns the current status of a previously submitted send. Useful
+        primarily for async sends; sync sends already include all delivery
+        metadata in the original response.
+      operationId: getMessage
+      parameters:
+        - name: trackingId
+          in: path
+          required: true
+          description: Tracking id returned by `POST /api/v1/public/messages`.
+          schema:
+            type: string
+            pattern: '^tx_[a-f0-9]{32}$'
+            example: tx_767fd2faca0f4037b2a2bbcb91e5735f
+      responses:
+        '200':
+          description: Delivery record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageStatusResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: walk_live_<keyId>.<secret>
+      description: |
+        Pass your API key as `Authorization: Bearer walk_live_<keyId>.<secret>`.
+        Keys are issued from **Dashboard → API → API Keys**.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Caller-supplied idempotency key. The server caches the response under
+        `(api_key, idempotency_key)` for 24 hours; replays return the cached
+        result with header `Idempotent-Replayed: true`. Replays with a
+        different payload yield `409 idempotency_conflict`.
+      schema:
+        type: string
+        maxLength: 200
+        example: 'order-12345-msg-1'
+
+  headers:
+    X-RateLimit-Limit:
+      description: Maximum requests allowed in the current window.
+      schema: { type: integer, example: 30 }
+    X-RateLimit-Remaining:
+      description: Requests remaining in the current window.
+      schema: { type: integer, example: 29 }
+    Idempotent-Replayed:
+      description: Set to `true` when the response is a cached replay.
+      schema: { type: string, enum: ['true'] }
+
+  schemas:
+    SendMessageRequest:
+      type: object
+      required: [device_id, template_id, phone]
+      additionalProperties: false
+      properties:
+        device_id:
+          type: integer
+          minimum: 1
+          description: ID of the tenant device that should send the message.
+          example: 1
+        template_id:
+          type: integer
+          minimum: 1
+          description: ID of the message template to render.
+          example: 12
+        variant_index:
+          type: [integer, 'null']
+          minimum: 0
+          description: |
+            Zero-based index into the template's variant pool. Omit (or
+            send `null`) to use the primary variant (index `0`). Rotating
+            variants reduces the chance of WhatsApp marking traffic as
+            spam.
+          example: 0
+        phone:
+          type: string
+          pattern: '^\+?\d{8,15}$'
+          description: |
+            E.164-style recipient phone number (with or without leading `+`).
+            Country code is required.
+          example: '+8801617738431'
+        variables:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            Substitution map for `{{key}}` placeholders in the template.
+            Missing keys render as empty strings.
+          example: { name: Kazi, dist: Dhaka }
+        async:
+          type: boolean
+          default: false
+          description: |
+            When `true`, the request is queued and the response returns
+            immediately (`202`) with a tracking id. Default `false`
+            (synchronous send).
+
+    EnvelopeBase:
+      type: object
+      required: [success, message]
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+
+    SendMessageSyncResponse:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            success: { const: true }
+            message: { example: Message sent. }
+            data:
+              type: object
+              required: [status, tracking_id, device_id, template_id, variant_index, phone, sent_at]
+              properties:
+                status:
+                  type: string
+                  enum: [sent]
+                tracking_id:
+                  type: string
+                  example: tx_767fd2faca0f4037b2a2bbcb91e5735f
+                device_id: { type: integer, example: 1 }
+                template_id: { type: integer, example: 12 }
+                variant_index: { type: integer, example: 0 }
+                phone: { type: string, example: '+8801617738431' }
+                sent_at:
+                  type: string
+                  format: date-time
+                  example: '2026-05-01T03:38:07.165Z'
+                wa_message_id:
+                  type: [string, 'null']
+                  example: 3EB0AF365B33081793622A
+
+    SendMessageAsyncResponse:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            success: { const: true }
+            message: { example: Message queued for sending. }
+            data:
+              type: object
+              required: [tracking_id, status, status_url]
+              properties:
+                tracking_id:
+                  type: string
+                  example: tx_767fd2faca0f4037b2a2bbcb91e5735f
+                status:
+                  type: string
+                  enum: [queued]
+                status_url:
+                  type: string
+                  example: /api/v1/public/messages/tx_767fd2faca0f4037b2a2bbcb91e5735f
+
+    MessageStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            success: { const: true }
+            data:
+              type: object
+              required: [tracking_id, status, device_id, template_id, variant_index, phone, created_at]
+              properties:
+                tracking_id: { type: string }
+                status:
+                  type: string
+                  enum: [queued, sending, sent, failed]
+                device_id: { type: integer }
+                template_id: { type: integer }
+                variant_index: { type: integer }
+                phone: { type: string }
+                wa_message_id: { type: [string, 'null'] }
+                error_code: { type: [string, 'null'] }
+                error_message: { type: [string, 'null'] }
+                sent_at:
+                  type: [string, 'null']
+                  format: date-time
+                created_at:
+                  type: string
+                  format: date-time
+
+    ErrorEnvelope:
+      type: object
+      required: [success, message]
+      properties:
+        success: { const: false }
+        message: { type: string }
+        error_code:
+          type: string
+          description: |
+            Stable machine-readable code. See `docs/error-codes.md` for the
+            full table; SDKs map these to typed exceptions.
+          example: device_not_found
+        details:
+          type: object
+          additionalProperties: true
+          description: |
+            Optional structured context (e.g., field-level validation
+            errors). Shape depends on `error_code`.
+
+  responses:
+    BadRequest:
+      description: Malformed request or `variant_index` out of range.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unauthorized:
+      description: Missing, malformed, expired, or revoked API key.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: Tenant suspended or message quota exceeded.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: Device, template, or tracking id does not exist.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: |
+        Device is not connected, or `Idempotency-Key` was reused with a
+        different payload.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    UnprocessableEntity:
+      description: Phone number is not registered on WhatsApp.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    TooManyRequests:
+      description: Rate limit exceeded.
+      headers:
+        Retry-After:
+          schema: { type: integer, example: 12 }
+        X-RateLimit-Limit: { $ref: '#/components/headers/X-RateLimit-Limit' }
+        X-RateLimit-Remaining: { $ref: '#/components/headers/X-RateLimit-Remaining' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    GatewayTimeout:
+      description: WhatsApp send timed out (default 15s). Safe to retry with the same `Idempotency-Key`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    ServerError:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
