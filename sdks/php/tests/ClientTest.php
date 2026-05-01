@@ -19,7 +19,7 @@ final class ClientTest extends TestCase
     {
         $client = new Client([
             'api_key'  => 'walk_test_x.y',
-            'base_url' => 'https://api-stage.walinko.com',
+            'base_url' => 'https://api.example.com',
         ]);
         self::assertInstanceOf(Client::class, $client);
     }

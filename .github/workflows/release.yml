@@ -1,31 +1,48 @@
 name: Release
 
 # Tag conventions:
-#   ruby-vX.Y.Z  → publishes the gem from sdks/ruby
-#   php-vX.Y.Z   → tags the split mirror so Packagist publishes
-#                  (see php-split.yml)
+#   ruby-vX.Y.Z  → publishes the gem from sdks/ruby to RubyGems
+#   php-vX.Y.Z   → handled exclusively by .github/workflows/php-split.yml,
+#                  which mirrors the sdks/php/ subtree to walinko-php and
+#                  pushes a vX.Y.Z tag there for Packagist to pick up.
+#                  Nothing in this workflow needs to fire for PHP.
 
 on:
   push:
     tags:
       - 'ruby-v*'
-      - 'php-v*'
 
 jobs:
   ruby:
     name: Publish Ruby gem
-    if: startsWith(github.ref, 'refs/tags/ruby-v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3'
           working-directory: sdks/ruby
           bundler-cache: true
+
+      # Guard: the version baked into lib/walinko/version.rb must match the
+      # ruby-vX.Y.Z tag, otherwise we'd publish the wrong number.
+      - name: Verify gem version matches tag
+        working-directory: sdks/ruby
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/ruby-v}"
+          GEM_VERSION=$(ruby -r ./lib/walinko/version.rb -e 'puts Walinko::VERSION')
+          echo "Tag:  $TAG_VERSION"
+          echo "Gem:  $GEM_VERSION"
+          if [ "$TAG_VERSION" != "$GEM_VERSION" ]; then
+            echo "::error::Tag (ruby-v$TAG_VERSION) does not match Walinko::VERSION ($GEM_VERSION)"
+            exit 1
+          fi
+
       - name: Build
         working-directory: sdks/ruby
         run: gem build walinko.gemspec
+
       - name: Publish to RubyGems
         working-directory: sdks/ruby
         env:
@@ -35,13 +52,3 @@ jobs:
           printf -- "---\n:rubygems_api_key: %s\n" "$RUBYGEMS_API_KEY" > ~/.gem/credentials
           chmod 0600 ~/.gem/credentials
           gem push *.gem
-
-  php:
-    name: Tag PHP mirror
-    if: startsWith(github.ref, 'refs/tags/php-v')
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "PHP releases propagate via .github/workflows/php-split.yml"
-          echo "(this job is a no-op placeholder; the actual tag push happens"
-          echo " in the split workflow when the tag matches refs/tags/php-v*)."

@@ -5,17 +5,27 @@ name: PHP subtree split (Packagist mirror)
 # into a thin read-only repo (walinko/walinko-php) that Packagist watches.
 # This is the same pattern Symfony, Laravel, and Doctrine use.
 #
-# Required org-level secrets:
-#   - WALINKO_PHP_MIRROR_REPO   = walinko/walinko-php
-#   - WALINKO_PHP_MIRROR_TOKEN  = PAT with `contents: write` on the mirror repo
+# Required to enable:
+#   - org variable WALINKO_PHP_MIRROR_REPO   = walinko/walinko-php
+#   - org secret   WALINKO_PHP_MIRROR_TOKEN  = PAT with `contents: write` on
+#                                              the mirror repo
+#
+# Tag handling: a `php-vX.Y.Z` tag in this repo is mirrored to the read-only
+# repo as `vX.Y.Z` so Packagist publishes it as version X.Y.Z.
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['php-v*']
     paths:
       - 'sdks/php/**'
       - '.github/workflows/php-split.yml'
+  workflow_dispatch:
+
+# Serialize runs so a fast follow-up commit can't race the previous push.
+concurrency:
+  group: php-split
+  cancel-in-progress: false
 
 jobs:
   split:
@@ -25,28 +35,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # full history is required by splitsh-lite
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false
+
       - name: Install splitsh-lite
-        run: |
-          curl -fsSL -o /tmp/splitsh.tgz \
-            https://github.com/splitsh/lite/releases/download/v2.0.0/lite_linux_amd64.tar.gz
-          tar -xzf /tmp/splitsh.tgz -C /tmp
-          sudo mv /tmp/splitsh-lite /usr/local/bin/
+        run: go install github.com/splitsh/lite@v2.0.0
+
       - name: Compute split SHA
         id: split
         run: |
           SHA=$(splitsh-lite --prefix=sdks/php)
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-      - name: Push to mirror
+          echo "Split SHA: $SHA"
+
+      - name: Push branch to mirror
         env:
           MIRROR: ${{ vars.WALINKO_PHP_MIRROR_REPO }}
           TOKEN:  ${{ secrets.WALINKO_PHP_MIRROR_TOKEN }}
           SHA:    ${{ steps.split.outputs.sha }}
         run: |
           git remote add mirror "https://x-access-token:${TOKEN}@github.com/${MIRROR}.git"
-          # main branch
+          # The mirror is exclusively written by this workflow, so a plain
+          # force push is safe; the upstream "source of truth" history lives
+          # in this monorepo.
           git push mirror "${SHA}:refs/heads/main" --force
-          # if this run was triggered by a tag, propagate the tag too
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            git push mirror "${SHA}:${GITHUB_REF}"
-          fi
+
+      - name: Push tag to mirror (php-vX.Y.Z → vX.Y.Z)
+        if: startsWith(github.ref, 'refs/tags/php-v')
+        env:
+          MIRROR: ${{ vars.WALINKO_PHP_MIRROR_REPO }}
+          TOKEN:  ${{ secrets.WALINKO_PHP_MIRROR_TOKEN }}
+          SHA:    ${{ steps.split.outputs.sha }}
+        run: |
+          # Strip the `php-` prefix so Packagist sees a SemVer tag (vX.Y.Z).
+          SOURCE_TAG="${GITHUB_REF#refs/tags/}"
+          TARGET_TAG="${SOURCE_TAG#php-}"
+          echo "Mirroring ${SOURCE_TAG} → ${TARGET_TAG} on ${MIRROR}"
+          git push mirror "${SHA}:refs/tags/${TARGET_TAG}"

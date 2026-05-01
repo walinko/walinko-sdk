@@ -17,7 +17,7 @@ RSpec.describe Walinko do
     end
 
     it 'accepts a base_url override' do
-      client = described_class.new(api_key: 'walk_test_x.y', base_url: 'https://api-stage.walinko.com')
+      client = described_class.new(api_key: 'walk_test_x.y', base_url: 'https://api.example.com')
       expect(client).to be_a(described_class)
     end
 

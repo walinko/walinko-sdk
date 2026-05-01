@@ -23,8 +23,6 @@ info:
 servers:
   - url: https://api.walinko.com
     description: Production
-  - url: https://api-stage.walinko.com
-    description: Staging
 
 security:
   - apiKey: []
