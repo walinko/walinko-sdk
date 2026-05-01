@@ -1,0 +1,68 @@
+AllCops:
+  TargetRubyVersion: 3.1
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - 'tmp/**/*'
+    - 'pkg/**/*'
+    - 'vendor/**/*'
+
+# This is a small SDK; the defaults are too noisy for a single-file
+# transport / single-file resource pattern.
+
+Metrics/MethodLength:
+  Max: 30
+
+Metrics/AbcSize:
+  Max: 30
+
+Metrics/ClassLength:
+  Max: 200
+
+Metrics/ParameterLists:
+  Max: 7
+  CountKeywordArgs: false
+
+Metrics/CyclomaticComplexity:
+  Max: 10
+
+Metrics/PerceivedComplexity:
+  Max: 10
+
+# RSpec describe / context blocks are routinely long; not interesting to lint.
+Metrics/BlockLength:
+  Exclude:
+    - 'spec/**/*'
+    - '*.gemspec'
+
+# `end.to raise_error(...) do |err| ... end` is a standard RSpec idiom.
+Style/MultilineBlockChain:
+  Exclude:
+    - 'spec/**/*'
+
+# We deliberately keep dev dependencies in the gemspec — that is the
+# canonical place per RubyGems guides and lets `gem install --dev` work.
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Style/Documentation:
+  Enabled: false
+
+Style/HashSyntax:
+  EnforcedShorthandSyntax: never
+
+# `def sent?; status == 'sent'; end` is genuinely clearer on one line for
+# trivial predicates.
+Style/SingleLineMethods:
+  Enabled: false
+
+Layout/LineLength:
+  Max: 110
+  AllowedPatterns: ['^\s*#'] # don't split long comment lines
+
+Lint/SuppressedException:
+  AllowComments: true
+
+# We disable per-file requires of rubocop-rspec; if you want spec linting
+# add `rubocop-rspec` to development dependencies and uncomment the
+# `require: rubocop-rspec` directive at the top of this file.

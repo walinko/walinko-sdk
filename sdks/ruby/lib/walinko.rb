@@ -1,34 +1,52 @@
 # frozen_string_literal: true
 
 require_relative 'walinko/version'
+require_relative 'walinko/errors'
+require_relative 'walinko/configuration'
+require_relative 'walinko/result'
+require_relative 'walinko/http_client'
+require_relative 'walinko/messages'
 
-# Walinko Ruby SDK.
+# Walinko Ruby SDK — server-to-server client for the Walinko public API.
 #
-# This file is currently a stub. The full client (transport, messages
-# resource, errors, idempotency, retries) lands in Phase 1 of the SDK
-# rollout. The public surface is documented in `README.md` and pinned by
-# `docs/openapi.yaml` at the repo root.
+# See the README for a quick-start; the contract is pinned in
+# `walinko-sdk/docs/openapi.yaml`.
 #
-# TODO(walinko-webhooks): reserve `Walinko::Client#webhooks` for the future
-# webhook receiver helpers (signature verification, event dispatch). Adding
-# them later must remain non-breaking for v1.
+# TODO(walinko-webhooks): when the server starts emitting webhooks,
+# `Walinko::Client#webhooks` (e.g. `client.webhooks.verify(payload, sig)`)
+# will land here. Reserving the namespace so v1 callers don't break.
 module Walinko
-  class Error < StandardError; end
-
   class Client
-    # Stub constructor — kept here so `require 'walinko'` succeeds while the
-    # real implementation is being written. Calling `#messages` raises until
-    # Phase 1 lands.
-    def initialize(api_key:, base_url: 'https://api.walinko.com', **_opts)
-      raise ArgumentError, 'api_key is required' if api_key.nil? || api_key.empty?
+    # @return [Walinko::Configuration]
+    attr_reader :config
 
-      @api_key  = api_key
-      @base_url = base_url
+    # @return [Walinko::Messages]
+    attr_reader :messages
+
+    # @param api_key      [String] required, e.g. "walk_live_<keyId>.<secret>"
+    # @param base_url     [String] optional, defaults to "https://api.walinko.com"
+    # @param timeout      [Integer] read timeout in seconds (default 30)
+    # @param open_timeout [Integer] connection timeout in seconds (default 10)
+    # @param max_retries  [Integer] retries on idempotent failures (default 2)
+    # @param logger       [#info,#warn,#error] optional structured logger
+    def initialize(api_key:, **opts)
+      @config = Configuration.new(api_key: api_key, **opts)
+      @http   = HttpClient.new(@config)
+      @messages = Messages.new(@http)
     end
 
-    def messages
-      raise NotImplementedError,
-            'Walinko Ruby SDK is in scaffolding. The messages resource will land in 0.1.0.'
+    # Snapshot of the rate-limit window from the most recent response.
+    # Returns `nil` until the first call has completed.
+    # @return [Walinko::RateLimitSnapshot, nil]
+    def last_rate_limit
+      @http.last_rate_limit
+    end
+
+    # The `X-Request-Id` from the most recent response (or `nil`).
+    # Useful when filing support tickets.
+    # @return [String, nil]
+    def last_request_id
+      @http.last_request_id
     end
   end
 end

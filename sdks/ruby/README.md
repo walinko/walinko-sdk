@@ -2,8 +2,13 @@
 
 Official Ruby client for the [Walinko](https://walinko.com) public API.
 
-> **Status:** scaffolding. The first usable release is `0.1.0` — the stub in
-> `lib/walinko.rb` is wired up just enough that `require 'walinko'` works.
+Send transactional WhatsApp messages from your Ruby app with idempotent
+retries, structured errors, and a tiny dependency footprint (Ruby stdlib
+only).
+
+* Ruby 3.1+
+* Zero runtime dependencies (only `net/http` + `json` from stdlib)
+* MIT licensed
 
 ## Install
 
@@ -17,7 +22,7 @@ gem install walinko
 gem 'walinko', '~> 0.1'
 ```
 
-## Quick start (target API for `0.1.0`)
+## Quick start
 
 ```ruby
 require 'walinko'
@@ -53,6 +58,17 @@ final = client.messages.wait_until_done(job.tracking_id, timeout: 60)
 puts final.status           # "sent" | "failed"
 ```
 
+## Looking up a delivery
+
+```ruby
+status = client.messages.fetch('tx_767fd2faca0f4037b2a2bbcb91e5735f')
+status.sent?         # true / false
+status.error_code    # nil if sent, e.g. "phone_not_on_whatsapp" if failed
+status.wa_message_id # WhatsApp's id, set on success
+status.created_at    # Time
+status.sent_at       # Time, nil while pending
+```
+
 ## Errors
 
 Every error is a subclass of `Walinko::Error`. See
@@ -79,14 +95,31 @@ The SDK auto-generates a UUID `Idempotency-Key` for every `send` / `enqueue`
 call so retries are safe end-to-end. Pass `idempotency_key:` to set your own
 (e.g. tying a send to your domain object).
 
+## Retries
+
+The SDK auto-retries idempotently on:
+
+| Trigger                 | Behaviour                                       |
+| ----------------------- | ----------------------------------------------- |
+| Network errors          | Exponential backoff with jitter                 |
+| HTTP 429                | Honours `Retry-After` (capped at 60s)           |
+| HTTP 500/502/503/504    | Exponential backoff with jitter                 |
+
+`max_retries` (default 2) controls how many additional attempts are made.
+4xx responses (other than 429) are surfaced immediately — the request is
+malformed or the server has rejected it on application grounds, and no
+amount of retrying will help.
+
 ## Rate limits
 
-The server enforces 30 req/min/key. The SDK exposes the latest known
-window state via:
+The server enforces 30 req/min/key (sliding window). The SDK exposes the
+latest known window state via:
 
 ```ruby
 client.last_rate_limit
-# => #<Walinko::RateLimitSnapshot limit=30 remaining=29 reset_at=...>
+# => #<Walinko::RateLimitSnapshot limit=30 remaining=29>
+client.last_request_id
+# => "req_4f2c..."  (handy for support tickets)
 ```
 
 ## Development

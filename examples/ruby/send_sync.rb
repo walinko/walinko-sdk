@@ -2,8 +2,8 @@
 
 # Run with: WALINKO_API_KEY=walk_live_... ruby examples/ruby/send_sync.rb
 #
-# This example demonstrates the *target* API for Walinko::Client#messages#send.
-# It will start working when the Ruby SDK reaches 0.1.0.
+# Synchronous send: blocks until the WhatsApp gateway acknowledges
+# delivery (or the server's 15s timeout fires).
 
 require 'walinko'
 

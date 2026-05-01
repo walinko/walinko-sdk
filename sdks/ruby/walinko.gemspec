@@ -20,11 +20,11 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = '>= 3.1.0'
 
   spec.metadata = {
-    'homepage_uri'      => spec.homepage,
-    'source_code_uri'   => 'https://github.com/walinko/walinko-sdk/tree/main/sdks/ruby',
-    'changelog_uri'     => 'https://github.com/walinko/walinko-sdk/blob/main/sdks/ruby/CHANGELOG.md',
+    'homepage_uri' => spec.homepage,
+    'source_code_uri' => 'https://github.com/walinko/walinko-sdk/tree/main/sdks/ruby',
+    'changelog_uri' => 'https://github.com/walinko/walinko-sdk/blob/main/sdks/ruby/CHANGELOG.md',
     'documentation_uri' => 'https://walinko.com/docs/api',
-    'bug_tracker_uri'   => 'https://github.com/walinko/walinko-sdk/issues',
+    'bug_tracker_uri' => 'https://github.com/walinko/walinko-sdk/issues',
     'rubygems_mfa_required' => 'true'
   }
 
@@ -34,6 +34,6 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_development_dependency 'rspec', '~> 3.13'
-  spec.add_development_dependency 'webmock', '~> 3.20'
   spec.add_development_dependency 'rubocop', '~> 1.65'
+  spec.add_development_dependency 'webmock', '~> 3.20'
 end
