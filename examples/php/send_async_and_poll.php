@@ -8,7 +8,13 @@ require __DIR__ . '/../../sdks/php/vendor/autoload.php';
 
 use Walinko\Client;
 
-$client = new Client(['api_key' => getenv('WALINKO_API_KEY')]);
+$apiKey = getenv('WALINKO_API_KEY');
+if ($apiKey === false || $apiKey === '') {
+    fwrite(\STDERR, "Set WALINKO_API_KEY first.\n");
+    exit(1);
+}
+
+$client = new Client(['api_key' => $apiKey]);
 
 $job = $client->messages->enqueue([
     'device_id'   => 1,
@@ -17,12 +23,12 @@ $job = $client->messages->enqueue([
     'variables'   => ['name' => 'Kazi', 'dist' => 'Dhaka'],
 ]);
 
-echo "queued: {$job->tracking_id} (poll {$job->status_url})\n";
+echo "queued: {$job->trackingId} (poll {$job->statusUrl})\n";
 
-$final = $client->messages->waitUntilDone($job->tracking_id, timeout: 60, interval: 2);
+$final = $client->messages->waitUntilDone($job->trackingId, timeout: 60, interval: 2);
 
-if ($final->status === 'sent') {
-    echo "delivered (wa_message_id={$final->wa_message_id})\n";
+if ($final->isSent()) {
+    echo "delivered (wa_message_id={$final->waMessageId})\n";
 } else {
-    fwrite(STDERR, "failed: {$final->error_code} - {$final->error_message}\n");
+    fwrite(\STDERR, "failed: {$final->errorCode} - {$final->errorMessage}\n");
 }

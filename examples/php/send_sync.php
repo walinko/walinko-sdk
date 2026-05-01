@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 // Run with: WALINKO_API_KEY=walk_live_... php examples/php/send_sync.php
 //
-// This example demonstrates the *target* API for Walinko\Client::messages.
-// It will start working when the PHP SDK reaches 0.1.0.
+// Synchronous send: blocks until the WhatsApp gateway acknowledges
+// delivery (or the server's 15s timeout fires).
 
 require __DIR__ . '/../../sdks/php/vendor/autoload.php';
 
 use Walinko\Client;
 
-$client = new Client(['api_key' => getenv('WALINKO_API_KEY')]);
+$apiKey = getenv('WALINKO_API_KEY');
+if ($apiKey === false || $apiKey === '') {
+    fwrite(\STDERR, "Set WALINKO_API_KEY first.\n");
+    exit(1);
+}
+
+$client = new Client(['api_key' => $apiKey]);
 
 $result = $client->messages->send([
     'device_id'     => 1,
@@ -21,6 +27,6 @@ $result = $client->messages->send([
     'variables'     => ['name' => 'Kazi', 'dist' => 'Dhaka'],
 ]);
 
-echo "tracking_id:   {$result->tracking_id}\n";
-echo "wa_message_id: {$result->wa_message_id}\n";
+echo "tracking_id:   {$result->trackingId}\n";
+echo "wa_message_id: {$result->waMessageId}\n";
 echo "status:        {$result->status}\n";

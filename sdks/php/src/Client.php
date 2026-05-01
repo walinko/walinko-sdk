@@ -4,53 +4,76 @@ declare(strict_types=1);
 
 namespace Walinko;
 
+use Psr\Http\Client\ClientInterface as HttpClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\StreamFactoryInterface;
+use Psr\Log\LoggerInterface;
+use Walinko\Http\Transport;
+use Walinko\Resource\Messages;
+use Walinko\Result\RateLimitSnapshot;
+
 /**
- * Walinko PHP SDK client.
+ * Walinko PHP SDK — server-to-server client for the Walinko public API.
  *
- * This class is currently a stub. The full client (transport, messages
- * resource, errors, idempotency, retries) lands in Phase 1 of the SDK
- * rollout. The public surface is documented in `README.md` and pinned by
- * `docs/openapi.yaml` at the repo root.
+ * See `README.md` for a quick-start; the contract is pinned in
+ * `walinko-sdk/docs/openapi.yaml`.
  *
- * TODO(walinko-webhooks): reserve `$client->webhooks` for the future webhook
- * receiver helpers (signature verification, event dispatch). Adding them
- * later must remain non-breaking for v1.
+ * TODO(walinko-webhooks): when the server starts emitting webhooks,
+ * `$client->webhooks` (e.g. `$client->webhooks->verify($payload, $sig)`)
+ * will land here. Reserving the namespace so v1 callers don't break.
  */
 final class Client
 {
-    public const VERSION = '0.1.0-alpha1';
+    public const VERSION = '0.1.0';
 
-    private string $apiKey;
-    private string $baseUrl;
-    private int $timeout;
-    private int $maxRetries;
+    public readonly Configuration $config;
+    public readonly Messages $messages;
+
+    private readonly Transport $transport;
 
     /**
      * @param array{
-     *     api_key: string,
-     *     base_url?: string,
-     *     timeout?: int,
-     *     max_retries?: int,
-     *     http_client?: \Psr\Http\Client\ClientInterface,
-     *     logger?: \Psr\Log\LoggerInterface
+     *   api_key: string,
+     *   base_url?: string,
+     *   timeout?: int,
+     *   max_retries?: int,
+     *   http_client?: HttpClientInterface,
+     *   request_factory?: RequestFactoryInterface,
+     *   stream_factory?: StreamFactoryInterface,
+     *   logger?: LoggerInterface
      * } $options
      */
     public function __construct(array $options)
     {
-        if (!isset($options['api_key']) || $options['api_key'] === '') {
-            throw new \InvalidArgumentException('api_key is required');
-        }
-
-        $this->apiKey     = $options['api_key'];
-        $this->baseUrl    = $options['base_url']    ?? 'https://api.walinko.com';
-        $this->timeout    = (int) ($options['timeout']     ?? 30);
-        $this->maxRetries = (int) ($options['max_retries'] ?? 2);
+        $this->config = new Configuration($options);
+        $this->transport = new Transport($this->config);
+        $this->messages = new Messages($this->transport);
     }
 
-    public function messages(): never
+    /**
+     * Snapshot of the rate-limit window from the most recent response.
+     * Returns `null` until the first call has completed.
+     */
+    public function lastRateLimit(): ?RateLimitSnapshot
     {
-        throw new \LogicException(
-            'Walinko PHP SDK is in scaffolding. The Messages resource will land in 0.1.0.'
-        );
+        return $this->transport->lastRateLimit;
+    }
+
+    /**
+     * The `X-Request-Id` from the most recent response (or `null`).
+     * Useful when filing support tickets.
+     */
+    public function lastRequestId(): ?string
+    {
+        return $this->transport->lastRequestId;
+    }
+
+    /**
+     * @internal Test seam — exposes the transport so tests can stub
+     *           the sleep function.
+     */
+    public function transport(): Transport
+    {
+        return $this->transport;
     }
 }
