@@ -250,18 +250,30 @@ RSpec.describe Walinko::Messages do
     end
 
     it 'raises Walinko::TimeoutError when the deadline expires while still pending' do
-      stub_request(:get, status_url).to_return(
-        status: 200,
-        body: success_envelope('tracking_id' => 'tx_abc', 'status' => 'queued'),
-        headers: common_response_headers
-      )
+      call_count = 0
+      stub_request(:get, status_url).to_return do |_req|
+        call_count += 1
+        { status: 200,
+          body: success_envelope('tracking_id' => 'tx_abc', 'status' => 'queued'),
+          headers: common_response_headers }
+      end
 
       messages_resource = client.messages
-      allow(messages_resource).to receive(:sleep)
+      allow(messages_resource).to receive(:sleep) do |_sec|
+        # Simulate elapsed time by advancing past the deadline after
+        # a few polls so the timeout fires naturally.
+        allow(messages_resource).to receive(:monotonic_now).and_return(
+          Process.clock_gettime(Process::CLOCK_MONOTONIC) + 999
+        )
+      end
 
       expect do
-        messages_resource.wait_until_done('tx_abc', timeout: 1, interval: 5)
+        messages_resource.wait_until_done('tx_abc', timeout: 2, interval: 0.5)
       end.to raise_error(Walinko::TimeoutError, /tx_abc/)
+
+      # Must have polled at least twice before timing out (proves the
+      # deadline check no longer fires prematurely on the first poll).
+      expect(call_count).to be >= 2
     end
   end
 
@@ -283,6 +295,7 @@ RSpec.describe Walinko::Messages do
       [422, 'validation_error'] => Walinko::ValidationError,
       [500, 'send_failed'] => Walinko::ServerError,
       [500, 'queue_failed'] => Walinko::ServerError,
+      [500, 'internal_error'] => Walinko::ServerError,
       [504, 'send_timeout'] => Walinko::TimeoutError
     }.each do |(status, code), klass|
       it "raises #{klass} for #{status}/#{code}" do

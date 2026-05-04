@@ -192,8 +192,9 @@ module Walinko
     def parse_retry_after(raw)
       v = raw['Retry-After']
       return nil if v.nil?
+      return nil unless v.match?(/\A\d+\z/)
 
-      v.to_i.positive? ? v.to_i : nil
+      v.to_i
     end
 
     def safe_parse_json(body)

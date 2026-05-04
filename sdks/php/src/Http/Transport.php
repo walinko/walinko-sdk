@@ -234,9 +234,7 @@ final class Transport
             return null;
         }
 
-        $seconds = (int) $value;
-
-        return $seconds > 0 ? $seconds : null;
+        return (int) $value;
     }
 
     /**

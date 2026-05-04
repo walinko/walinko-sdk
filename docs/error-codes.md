@@ -27,6 +27,7 @@ SDK bump.
 | 422  | `validation_error`     | DTO validation failure (one or more fields). `details.fields` is a `{field: [reason]}` map. | no | `Walinko::ValidationError`     | `Walinko\Exception\ValidationException`      |
 | 429  | `rate_limited`         | Sliding-window rate limit (30 req/min/key) exceeded.                    | yes — honor `Retry-After` | `Walinko::RateLimitError` | `Walinko\Exception\RateLimitException`       |
 | 500  | `send_failed`          | Internal failure during WhatsApp send. May or may not have delivered.   | yes — with `Idempotency-Key` | `Walinko::ServerError`     | `Walinko\Exception\ServerException`          |
+| 500  | `queue_failed`         | Async enqueue failed before reaching the WhatsApp gateway.              | yes — with `Idempotency-Key` | `Walinko::ServerError`     | `Walinko\Exception\ServerException`          |
 | 500  | `internal_error`       | Anything else unexpected.                                               | yes — with `Idempotency-Key` | `Walinko::ServerError`     | `Walinko\Exception\ServerException`          |
 | 504  | `send_timeout`         | WhatsApp send did not complete within 15s. **Outcome unknown.**         | yes — with `Idempotency-Key` | `Walinko::TimeoutError`    | `Walinko\Exception\TimeoutException`         |
 
