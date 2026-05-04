@@ -1,5 +1,12 @@
 name: Release
 
+# MFA + API key (RUBYGEMS_API_KEY): RubyGems "UI and API" MFA requires an OTP
+# on every `gem push` — CI cannot supply it, so publish fails. Use MFA level
+# "UI and gem sign in" (or "UI only") so API-key pushes from Actions work.
+# Long-term: migrate to Trusted Publishing (OIDC) — no API secret on GitHub.
+# https://guides.rubygems.org/setting-up-multifactor-authentication
+# https://guides.rubygems.org/trusted-publishing/
+
 # Tag conventions:
 #   ruby-vX.Y.Z  → publishes the gem from sdks/ruby to RubyGems
 #   php-vX.Y.Z   → handled exclusively by .github/workflows/php-split.yml,
