@@ -137,7 +137,7 @@ final class Messages
                 return $status;
             }
 
-            if ($this->monotonicNow() + $interval >= $deadline) {
+            if ($this->monotonicNow() >= $deadline) {
                 throw new TimeoutException(
                     sprintf(
                         'Timed out waiting for %s after %ds (still %s)',

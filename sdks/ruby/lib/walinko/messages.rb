@@ -106,7 +106,7 @@ module Walinko
         status = fetch(tracking_id)
         return status if status.done?
 
-        if monotonic_now + interval.to_f >= deadline
+        if monotonic_now >= deadline
           raise TimeoutError.new(
             "Timed out waiting for #{tracking_id} after #{timeout}s (still #{status.status})",
             http_status: 504,

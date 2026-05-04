@@ -309,12 +309,28 @@ final class MessagesTest extends TestCase
 
     public function testWaitUntilDoneRaisesTimeoutException(): void
     {
-        $this->http->pushResponse(200, self::successEnvelope(['tracking_id' => 'tx_abc', 'status' => 'queued']), self::commonHeaders());
+        // Push enough responses for several poll iterations.
+        for ($i = 0; $i < 20; $i++) {
+            $this->http->pushResponse(200, self::successEnvelope(['tracking_id' => 'tx_abc', 'status' => 'queued']), self::commonHeaders());
+        }
 
-        $messages = $this->nonBlockingMessages();
-        $this->expectException(TimeoutException::class);
-        $this->expectExceptionMessageMatches('/tx_abc/');
-        $messages->waitUntilDone('tx_abc', timeout: 1, interval: 5);
+        $messages = $this->client->messages;
+        // Use a real but short sleep so wall-clock time advances past the deadline.
+        $messages->setSleeper(static function (float $seconds): void {
+            usleep(200_000); // 200ms per poll
+        });
+
+        try {
+            $messages->waitUntilDone('tx_abc', timeout: 1, interval: 0.2);
+        } catch (TimeoutException $e) {
+            self::assertStringContainsString('tx_abc', $e->getMessage());
+            // Must have polled more than once before timing out (proves the
+            // deadline check no longer fires prematurely on the first poll).
+            self::assertGreaterThanOrEqual(2, \count($this->http->requests));
+            return;
+        }
+
+        self::fail('Expected TimeoutException');
     }
 
     // ---- error mapping per error_code ------------------------------
@@ -339,6 +355,7 @@ final class MessagesTest extends TestCase
             '422 validation_error'     => [422, 'validation_error',      ValidationException::class],
             '500 send_failed'          => [500, 'send_failed',           ServerException::class],
             '500 queue_failed'         => [500, 'queue_failed',          ServerException::class],
+            '500 internal_error'       => [500, 'internal_error',        ServerException::class],
             '504 send_timeout'         => [504, 'send_timeout',          TimeoutException::class],
         ];
     }
