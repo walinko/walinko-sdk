@@ -259,7 +259,7 @@ RSpec.describe Walinko::Messages do
       end
 
       messages_resource = client.messages
-      allow(messages_resource).to receive(:sleep) do |sec|
+      allow(messages_resource).to receive(:sleep) do |_sec|
         # Simulate elapsed time by advancing past the deadline after
         # a few polls so the timeout fires naturally.
         allow(messages_resource).to receive(:monotonic_now).and_return(
