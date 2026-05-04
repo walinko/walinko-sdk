@@ -35,21 +35,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history is required by splitsh-lite
+          fetch-depth: 0   # full history is required by `git subtree split`
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-          cache: false
-
-      - name: Install splitsh-lite
-        run: go install github.com/splitsh/lite@v2.0.0
-
-      - name: Compute split SHA
+      # splitsh-lite's Go module tags no longer install cleanly on modern
+      # toolchains; `git subtree split` is built into Git and produces the
+      # same kind of subdirectory-only history for the mirror push.
+      - name: Compute split SHA (git subtree)
         id: split
         run: |
-          SHA=$(splitsh-lite --prefix=sdks/php)
+          TMP_BRANCH="__php_split_${GITHUB_RUN_ID}"
+          git subtree split --prefix=sdks/php -b "$TMP_BRANCH"
+          SHA=$(git rev-parse "$TMP_BRANCH")
+          git branch -D "$TMP_BRANCH"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Split SHA: $SHA"
 
